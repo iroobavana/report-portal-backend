@@ -17,6 +17,53 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD || 'your_password',
   port: process.env.DB_PORT || 5432,
 });
+// Auto-create tables if they don't exist
+const initDB = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        type VARCHAR(100) NOT NULL,
+        parent_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        username VARCHAR(100) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'submitter', 'internal_approver', 'lga_approver')),
+        organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE TABLE IF NOT EXISTS reports (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(500) NOT NULL,
+        content TEXT,
+        organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+        submitter_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        status VARCHAR(50) NOT NULL CHECK (status IN ('pending_internal', 'internally_approved', 'approved', 'rejected', 'overdue')),
+        due_date DATE NOT NULL,
+        submitted_date DATE NOT NULL,
+        internal_approver_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        lga_approver_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Database tables initialized');
+  } catch (error) {
+    console.error('Database initialization error:', error);
+  }
+};
+
+initDB();
 
 // Middleware
 app.use(cors());
