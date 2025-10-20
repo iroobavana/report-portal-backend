@@ -504,6 +504,45 @@ app.post('/api/init-admin', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// Initialize admin user route (call this once)
+app.get('/api/init-admin', async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    
+    // Check if admin exists
+    const check = await pool.query('SELECT id, username, role FROM users WHERE username = $1', ['admin']);
+    
+    if (check.rows.length > 0) {
+      return res.json({ 
+        message: 'Admin already exists!', 
+        user: check.rows[0] 
+      });
+    }
+    
+    // Create admin with hashed password
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+    
+    const result = await pool.query(
+      `INSERT INTO users (name, email, username, password, role, organization_id) 
+       VALUES ($1, $2, $3, $4, $5, $6) 
+       RETURNING id, username, email, role`,
+      ['Admin User', 'admin@portal.gov', 'admin', hashedPassword, 'admin', null]
+    );
+    
+    res.json({ 
+      message: 'Admin created successfully!',
+      user: result.rows[0]
+    });
+    
+  } catch (error) {
+    console.error('Init admin error:', error);
+    res.status(500).json({ 
+      error: error.message,
+      code: error.code,
+      detail: error.detail
+    });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
