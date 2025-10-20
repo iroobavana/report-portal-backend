@@ -11,11 +11,8 @@ const PORT = process.env.PORT || 5000;
 
 // Database connection
 const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'report_portal',
-  password: process.env.DB_PASSWORD || 'your_password',
-  port: process.env.DB_PORT || 5432,
+  connectionString: process.env.DATABASE_URL || `postgresql://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'report_portal'}`,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 // Auto-create tables if they don't exist
 const initDB = async () => {
@@ -480,6 +477,33 @@ app.get('/api/health', (req, res) => {
 });
 
 // Start server
+// Initialize admin user (remove this route after first use!)
+app.post('/api/init-admin', async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+    
+    await pool.query(`
+      INSERT INTO organizations (name, type, parent_id) VALUES
+      ('Male City Council', 'LGA', NULL),
+      ('Addu City Council', 'Atoll Council', NULL),
+      ('Health Department - Male', 'Department', 1),
+      ('Education Department - Male', 'Department', 1)
+      ON CONFLICT DO NOTHING;
+      
+      INSERT INTO users (name, email, username, password, role, organization_id) VALUES
+      ('Admin User', 'admin@portal.gov', 'admin', $1, 'admin', NULL),
+      ('John Submitter', 'john@health.gov', 'john', $1, 'submitter', 3),
+      ('Sarah Approver', 'sarah@health.gov', 'sarah', $1, 'internal_approver', 3),
+      ('Ahmed LGA', 'ahmed@male.gov', 'ahmed', $1, 'lga_approver', 1)
+      ON CONFLICT DO NOTHING;
+    `, [hashedPassword]);
+    
+    res.json({ message: 'Admin initialized!' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
